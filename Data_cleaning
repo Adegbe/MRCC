@@ -1,0 +1,355 @@
+import pandas as pd
+import numpy as np
+import hashlib
+import json
+import os
+import zipfile
+from datetime import datetime
+from pandas_profiling import ProfileReport
+from typing import Union, Dict, List, Optional
+
+class DataCleaner:
+    def __init__(self):
+        self.report_data = {}
+        self.warning_log = []
+        self.pii_columns = []
+        self.duplicate_key_columns = []
+        self.custom_rules = {}
+        
+    def load_file(self, file_path: str) -> pd.DataFrame:
+        """Load data from various file formats with auto-detection"""
+        self.report_data['original_file'] = os.path.basename(file_path)
+        self.report_data['load_time'] = datetime.now().isoformat()
+        
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        try:
+            if file_ext == '.csv':
+                df = pd.read_csv(file_path)
+            elif file_ext in ('.xls', '.xlsx'):
+                df = pd.read_excel(file_path)
+            elif file_ext == '.json':
+                df = pd.read_json(file_path)
+            else:
+                raise ValueError(f"Unsupported file format: {file_ext}")
+        except Exception as e:
+            self._log_warning(f"File loading failed: {str(e)}")
+            raise
+            
+        self.report_data['original_rows'] = len(df)
+        self.report_data['original_columns'] = len(df.columns)
+        self.report_data['sample_data'] = df.head(5).to_dict('records')
+        
+        return df
+    
+    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Main cleaning pipeline"""
+        # Store original columns for tracking
+        original_columns = df.columns.tolist()
+        
+        # Step 1: Normalize column names
+        df = self._normalize_column_names(df)
+        
+        # Step 2: Clean string data
+        df = self._clean_string_data(df)
+        
+        # Step 3: Standardize date formats
+        df = self._standardize_dates(df)
+        
+        # Step 4: Handle missing data
+        df = self._handle_missing_data(df)
+        
+        # Step 5: Handle duplicates
+        df = self._handle_duplicates(df)
+        
+        # Step 6: Mask PII data
+        df = self._mask_pii(df)
+        
+        # Step 7: Detect and correct wrong entries
+        df = self._correct_wrong_entries(df)
+        
+        # Step 8: Apply custom rules if any
+        if self.custom_rules:
+            df = self._apply_custom_rules(df)
+            
+        # Track column changes
+        self.report_data['column_changes'] = {
+            'original_columns': original_columns,
+            'final_columns': df.columns.tolist(),
+            'added_columns': [col for col in df.columns if col not in original_columns],
+            'removed_columns': [col for col in original_columns if col not in df.columns]
+        }
+        
+        self.report_data['final_rows'] = len(df)
+        self.report_data['final_columns'] = len(df.columns)
+        self.report_data['warnings_count'] = len(self.warning_log)
+        
+        return df
+    
+    def generate_report(self, df: pd.DataFrame, report_path: str = None) -> dict:
+        """Generate comprehensive data profile report"""
+        profile = ProfileReport(df, explorative=True)
+        
+        # Basic statistics
+        self.report_data['data_types'] = dict(df.dtypes)
+        self.report_data['missing_values'] = df.isnull().sum().to_dict()
+        self.report_data['unique_values'] = df.nunique().to_dict()
+        
+        # Descriptive stats for numeric columns
+        numeric_cols = df.select_dtypes(include=np.number).columns
+        if not numeric_cols.empty:
+            self.report_data['numeric_stats'] = df[numeric_cols].describe().to_dict()
+        
+        # Save report if path provided
+        if report_path:
+            profile.to_file(report_path)
+            self.report_data['report_path'] = report_path
+            
+        return self.report_data
+    
+    def export_data(self, df: pd.DataFrame, output_path: str, format: str = 'csv', 
+                   include_report: bool = False, zip_output: bool = False):
+        """Export cleaned data with various options"""
+        output_dir = os.path.dirname(output_path)
+        base_name = os.path.splitext(os.path.basename(output_path))[0]
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Export main data file
+        if format.lower() == 'csv':
+            data_file = os.path.join(output_dir, f"{base_name}_cleaned.csv")
+            df.to_csv(data_file, index=False)
+        elif format.lower() in ('xls', 'xlsx'):
+            data_file = os.path.join(output_dir, f"{base_name}_cleaned.xlsx")
+            df.to_excel(data_file, index=False)
+        else:
+            raise ValueError("Unsupported export format. Use 'csv' or 'excel'.")
+        
+        # Export report if requested
+        report_file = None
+        if include_report:
+            report_file = os.path.join(output_dir, f"{base_name}_report.json")
+            with open(report_file, 'w') as f:
+                json.dump(self.report_data, f, indent=2)
+        
+        # Create ZIP bundle if requested
+        if zip_output:
+            zip_file = os.path.join(output_dir, f"{base_name}_bundle.zip")
+            with zipfile.ZipFile(zip_file, 'w') as zipf:
+                zipf.write(data_file, os.path.basename(data_file))
+                if report_file:
+                    zipf.write(report_file, os.path.basename(report_file))
+            
+            # Clean up individual files if we created a zip
+            os.remove(data_file)
+            if report_file:
+                os.remove(report_file)
+                
+            return zip_file
+        
+        return data_file
+    
+    def set_pii_columns(self, columns: List[str]):
+        """Set which columns contain PII that should be masked"""
+        self.pii_columns = columns
+        
+    def set_duplicate_key_columns(self, columns: List[str]):
+        """Set which columns to use for duplicate detection"""
+        self.duplicate_key_columns = columns
+        
+    def add_custom_rule(self, rule_name: str, rule_func: callable):
+        """Add a custom data cleaning rule"""
+        self.custom_rules[rule_name] = rule_func
+    
+    def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize column names to lowercase with underscores"""
+        df.columns = (
+            df.columns.str.lower()
+            .str.replace(r'[^\w]', '_', regex=True)
+            .str.replace(r'_+', '_', regex=True)
+            .str.strip('_')
+        )
+        return df
+    
+    def _clean_string_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Clean string data in the dataframe"""
+        for col in df.select_dtypes(include=['object']).columns:
+            # Trim whitespace
+            df[col] = df[col].str.strip()
+            
+            # Standardize gender-like columns
+            if 'gender' in col or 'sex' in col:
+                df[col] = (
+                    df[col].str.lower()
+                    .replace({'m': 'male', 'f': 'female', 'male': 'male', 'female': 'female'})
+                )
+                
+            # Remove special characters (except basic punctuation)
+            df[col] = df[col].str.replace(r'[^\w\s.,-]', '', regex=True)
+            
+        return df
+    
+    def _standardize_dates(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert all date columns to ISO 8601 format"""
+        for col in df.columns:
+            # Try to infer datetime columns
+            if pd.api.types.is_object_dtype(df[col]):
+                try:
+                    df[col] = pd.to_datetime(df[col], errors='raise')
+                    df[col] = df[col].dt.strftime('%Y-%m-%d')
+                except (ValueError, TypeError):
+                    pass
+                    
+        return df
+    
+    def _handle_missing_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Handle missing data according to predefined rules"""
+        missing_counts = df.isnull().sum()
+        total_rows = len(df)
+        
+        # Drop columns with too many missing values (>50%)
+        cols_to_drop = [col for col in df.columns if missing_counts[col] / total_rows > 0.5]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+            self._log_warning(f"Dropped columns with >50% missing values: {', '.join(cols_to_drop)}")
+        
+        # Impute remaining missing values
+        for col in df.columns:
+            if df[col].isnull().any():
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    impute_val = df[col].median()
+                    df[col] = df[col].fillna(impute_val)
+                    self._log_warning(f"Imputed numeric column '{col}' with median: {impute_val}")
+                elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                    df = df.dropna(subset=[col])
+                    self._log_warning(f"Dropped rows with missing dates in column '{col}'")
+                else:
+                    impute_val = df[col].mode()[0] if not df[col].mode().empty else 'unknown'
+                    df[col] = df[col].fillna(impute_val)
+                    self._log_warning(f"Imputed categorical column '{col}' with mode: {impute_val}")
+                    
+        return df
+    
+    def _handle_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Handle duplicate rows based on key columns"""
+        if not self.duplicate_key_columns:
+            # If no key columns specified, check all columns
+            duplicate_mask = df.duplicated(keep='first')
+        else:
+            # Check for duplicates using specified key columns
+            duplicate_mask = df.duplicated(subset=self.duplicate_key_columns, keep='first')
+        
+        duplicate_count = duplicate_mask.sum()
+        self.report_data['duplicate_count'] = duplicate_count
+        
+        if duplicate_count > 0:
+            self._log_warning(f"Found {duplicate_count} duplicate rows")
+            df = df[~duplicate_mask]
+            
+        return df
+    
+    def _mask_pii(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Mask personally identifiable information using hashing"""
+        if not self.pii_columns:
+            return df
+            
+        for col in self.pii_columns:
+            if col in df.columns:
+                # Apply SHA-256 hashing to PII columns
+                df[col] = df[col].apply(
+                    lambda x: hashlib.sha256(str(x).encode()).hexdigest() if pd.notnull(x) else x
+                )
+                
+        return df
+    
+    def _correct_wrong_entries(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Detect and correct common data entry errors"""
+        # Age validation
+        if 'age' in df.columns and pd.api.types.is_numeric_dtype(df['age']):
+            invalid_age_mask = (df['age'] < 0) | (df['age'] > 120)
+            if invalid_age_mask.any():
+                self._log_warning(f"Found {invalid_age_mask.sum()} rows with invalid age values")
+                df.loc[invalid_age_mask, 'age'] = np.nan
+                
+        # Date of birth validation
+        date_cols = [col for col in df.columns if 'date' in col or 'dob' in col]
+        for col in date_cols:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                future_dates = df[col] > pd.Timestamp.now()
+                if future_dates.any():
+                    self._log_warning(f"Found {future_dates.sum()} rows with future dates in column '{col}'")
+                    df.loc[future_dates, col] = pd.NaT
+                    
+        # Fix mixed data types
+        for col in df.columns:
+            if pd.api.types.is_object_dtype(df[col]):
+                # Try to convert to numeric if possible
+                numeric_vals = pd.to_numeric(df[col], errors='coerce')
+                if not numeric_vals.isna().all():  # If at least some values converted
+                    if numeric_vals.isna().any():  # But not all
+                        self._log_warning(f"Column '{col}' contains mixed numeric and non-numeric values")
+                    df[col] = numeric_vals
+                    
+        return df
+    
+    def _apply_custom_rules(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply user-defined cleaning rules"""
+        for rule_name, rule_func in self.custom_rules.items():
+            try:
+                df = rule_func(df)
+                self._log_warning(f"Applied custom rule: {rule_name}")
+            except Exception as e:
+                self._log_warning(f"Failed to apply custom rule {rule_name}: {str(e)}")
+                
+        return df
+    
+    def _log_warning(self, message: str):
+        """Log a warning message with timestamp"""
+        timestamp = datetime.now().isoformat()
+        self.warning_log.append({'timestamp': timestamp, 'message': message})
+        print(f"[WARNING] {timestamp}: {message}")
+
+
+# Example usage
+if __name__ == "__main__":
+    # Initialize the cleaner
+    cleaner = DataCleaner()
+    
+    # Configure PII and duplicate detection
+    cleaner.set_pii_columns(['name', 'email', 'phone_number'])
+    cleaner.set_duplicate_key_columns(['id', 'birth_date'])
+    
+    # Add a custom rule
+    def clean_ages(df):
+        """Custom rule to clean age column"""
+        if 'age' in df.columns:
+            # Convert any age > 100 to NaN
+            df.loc[df['age'] > 100, 'age'] = np.nan
+        return df
+    
+    cleaner.add_custom_rule('age_cleaner', clean_ages)
+    
+    try:
+        # Load the data
+        df = cleaner.load_file('input_data.csv')
+        
+        # Clean the data
+        cleaned_df = cleaner.clean_data(df)
+        
+        # Generate and save report
+        report = cleaner.generate_report(cleaned_df, 'report.html')
+        
+        # Export cleaned data
+        output_file = cleaner.export_data(
+            cleaned_df, 
+            output_path='output/cleaned_data',
+            format='csv',
+            include_report=True,
+            zip_output=True
+        )
+        
+        print(f"Processing complete. Output saved to: {output_file}")
+        
+    except Exception as e:
+        print(f"Error during processing: {str(e)}")
