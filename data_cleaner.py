@@ -16,6 +16,8 @@ class DataCleaner:
         self.pii_columns = []
         self.duplicate_key_columns = []
         self.custom_rules = {}
+        self.original_columns = []
+        self.column_orig_index = {}
         
     def load_file(self, file_path: str, low_memory: bool = False) -> pd.DataFrame:
         """Load data from various file formats with auto-detection"""
@@ -36,6 +38,10 @@ class DataCleaner:
         except Exception as e:
             self._log_warning(f"File loading failed: {str(e)}")
             raise
+            
+        # Store original columns and their indices
+        self.original_columns = df.columns.tolist()
+        self.column_orig_index = {col: idx+1 for idx, col in enumerate(self.original_columns)}
             
         self.report_data['original_rows'] = len(df)
         self.report_data['original_columns'] = len(df.columns)
@@ -292,7 +298,7 @@ class DataCleaner:
         return df
     
     def _mask_pii(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Mask personally identifiable information using hashing"""
+        """Mask PII data using MRCC + column number"""
         if not self.pii_columns or df.empty:
             return df
             
@@ -300,10 +306,14 @@ class DataCleaner:
         valid_pii_columns = [col for col in self.pii_columns if col in df.columns]
         
         for col in valid_pii_columns:
-            # Apply SHA-256 hashing to PII columns
-            df[col] = df[col].apply(
-                lambda x: hashlib.sha256(str(x).encode()).hexdigest() if pd.notnull(x) else x
-            )
+            # Get original column index from stored mapping
+            orig_idx = self.column_orig_index.get(col, None)
+            
+            if orig_idx:
+                # Replace all values with MRCC + column number
+                df[col] = f"MRCC{orig_idx}"
+            else:
+                self._log_warning(f"Original index not found for PII column: {col}")
                 
         return df
     
@@ -312,50 +322,47 @@ class DataCleaner:
         if df.empty:
             return df
             
-        # Age validation
+        # Age validation - replace invalid ages with "N"
         if 'age' in df.columns:
             try:
-                # Convert to numeric if possible
+                # Convert to numeric
                 df['age'] = pd.to_numeric(df['age'], errors='coerce')
                 if pd.api.types.is_numeric_dtype(df['age']):
+                    # Replace invalid ages (<0 or >120) with "N"
                     invalid_age_mask = (df['age'] < 0) | (df['age'] > 120)
-                    if invalid_age_mask.any():
-                        invalid_count = invalid_age_mask.sum()
-                        df.loc[invalid_age_mask, 'age'] = np.nan
+                    invalid_count = invalid_age_mask.sum()
+                    if invalid_count > 0:
+                        df.loc[invalid_age_mask, 'age'] = "N"
                         self._log_warning(f"Found {invalid_count} rows with invalid age values")
             except Exception as e:
                 self._log_warning(f"Age validation failed: {str(e)}")
                 
-        # Date of birth validation
-        date_cols = [col for col in df.columns if 'date' in col or 'dob' in col]
+        # Date validation - replace invalid dates with "N"
+        date_cols = [col for col in df.columns if 'date' in col or 'dob' in col or 'time' in col]
         current_date = pd.Timestamp.now()
         
         for col in date_cols:
             try:
-                if pd.api.types.is_datetime64_any_dtype(df[col]):
-                    future_dates = df[col] > current_date
-                    if future_dates.any():
-                        future_count = future_dates.sum()
-                        df.loc[future_dates, col] = pd.NaT
-                        self._log_warning(f"Found {future_count} rows with future dates in column '{col}'")
+                # Convert to datetime
+                date_series = pd.to_datetime(df[col], errors='coerce')
+                
+                # Replace invalid dates (future dates or unparseable) with "N"
+                invalid_mask = (date_series > current_date) | date_series.isna()
+                invalid_count = invalid_mask.sum()
+                
+                if invalid_count > 0:
+                    df.loc[invalid_mask, col] = "N"
+                    self._log_warning(f"Found {invalid_count} invalid dates in column '{col}'")
             except Exception as e:
                 self._log_warning(f"Date validation failed for {col}: {str(e)}")
                     
-        # Fix mixed data types
+        # Replace other invalid entries with "N" based on data type
         for col in df.columns:
             if pd.api.types.is_object_dtype(df[col]):
-                # Try to convert to numeric if possible
-                try:
-                    numeric_vals = pd.to_numeric(df[col], errors='coerce')
-                    if not numeric_vals.isna().all():  # If at least some values converted
-                        conversion_rate = 1 - (numeric_vals.isna().sum() / len(df))
-                        if conversion_rate > 0.5:  # Majority are convertible
-                            df[col] = numeric_vals
-                        else:
-                            self._log_warning(f"Column '{col}' contains mixed types (only {conversion_rate*100:.1f}% numeric)")
-                except Exception as e:
-                    self._log_warning(f"Type conversion failed for {col}: {str(e)}")
-                    
+                # Replace empty strings and whitespace-only with "N"
+                empty_mask = df[col].astype(str).str.strip().eq('')
+                df.loc[empty_mask, col] = "N"
+                
         return df
     
     def _apply_custom_rules(self, df: pd.DataFrame) -> pd.DataFrame:
