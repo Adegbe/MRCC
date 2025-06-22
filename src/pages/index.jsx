@@ -5,6 +5,7 @@ import SummaryPanel from '@components/SummaryPanel';
 import OptionsPanel from '@components/OptionsPanel';
 import DataPreview from '@components/DataPreview';
 import { cleanData } from '@services/dataCleaner';
+
 export default function Home() {
   const [file, setFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
@@ -18,7 +19,7 @@ export default function Home() {
     removeDuplicates: true,
     maskPII: true,
     correctInvalid: true,
-    validateTypes: true
+    validateTypes: true,
   });
   const downloadLinkRef = useRef(null);
 
@@ -26,25 +27,23 @@ export default function Home() {
     setFile(uploadedFile);
     setCleanedData(null);
     setReport(null);
-    
-    // Set mock file info (will be replaced with actual data from file)
     setFileInfo({
       type: uploadedFile.name.split('.').pop().toUpperCase(),
       rows: 1000,
-      columns: 20
+      columns: 20,
     });
   };
 
   const handleOptionChange = (option) => {
-    setOptions(prev => ({
+    setOptions((prev) => ({
       ...prev,
-      [option]: !prev[option]
+      [option]: !prev[option],
     }));
   };
 
   const processData = async () => {
     if (!file) return;
-    
+
     setProcessing(true);
     try {
       const result = await cleanData(file, options);
@@ -59,37 +58,26 @@ export default function Home() {
 
   const handleDownload = (format) => {
     if (!cleanedData) return;
-    
+
+    let blob;
     if (format === 'csv') {
-      // Convert to CSV
       const headers = Object.keys(cleanedData[0]);
       const csvContent = [
         headers.join(','),
-        ...cleanedData.map(row => 
-          headers.map(fieldName => 
-            `"${String(row[fieldName] || '').replace(/"/g, '""')}"`
-          ).join(',')
-        )
+        ...cleanedData.map((row) =>
+          headers.map((field) => `"${String(row[field] || '').replace(/"/g, '""')}"`).join(',')
+        ),
       ].join('\n');
-      
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      
-      if (downloadLinkRef.current) {
-        downloadLinkRef.current.href = url;
-        downloadLinkRef.current.download = `cleaned_data.csv`;
-        downloadLinkRef.current.click();
-      }
+      blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     } else if (format === 'json') {
-      // Download report as JSON
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      
-      if (downloadLinkRef.current) {
-        downloadLinkRef.current.href = url;
-        downloadLinkRef.current.download = `cleaning_report.json`;
-        downloadLinkRef.current.click();
-      }
+      blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    }
+
+    const url = URL.createObjectURL(blob);
+    if (downloadLinkRef.current) {
+      downloadLinkRef.current.href = url;
+      downloadLinkRef.current.download = format === 'csv' ? 'cleaned_data.csv' : 'cleaning_report.json';
+      downloadLinkRef.current.click();
     }
   };
 
@@ -102,79 +90,71 @@ export default function Home() {
         <link rel="preconnect" href="https://fonts.gstatic.com/" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?display=swap&family=Inter:wght@400;500;700;900&family=Noto+Sans:wght@400;500;700;900"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Noto+Sans:wght@400;500;700;900&display=swap"
         />
       </Head>
 
-      <header className="flex items-center justify-between border-b border-gray-200 px-4 md:px-10 py-3">
-        <div className="flex items-center gap-4 text-gray-900">
-          <div className="h-4 w-4">
-            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" clipRule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor"></path>
-            </svg>
-          </div>
-          <h2 className="text-lg font-bold leading-tight tracking-tight">Data Cleaner</h2>
+      <header className="flex items-center justify-between border-b border-gray-200 px-4 md:px-10 py-4">
+        <div className="flex items-center gap-3 text-gray-900">
+          <svg className="h-6 w-6 text-blue-600" fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" />
+          </svg>
+          <h1 className="text-lg font-bold">MRCC Data Cleaner</h1>
         </div>
-        <div className="flex flex-1 justify-end gap-4 md:gap-8">
-          <div className="flex items-center gap-4 md:gap-9">
-            <a className="text-sm font-medium leading-normal hover:text-blue-600" href="#">Home</a>
-            <a className="text-sm font-medium leading-normal hover:text-blue-600" href="#">Documentation</a>
-            <a className="text-sm font-medium leading-normal hover:text-blue-600" href="#">Support</a>
-          </div>
-          <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-gray-200 border-2 border-dashed" />
-        </div>
+        <nav className="flex gap-6 text-sm font-medium">
+          <a href="#" className="hover:text-blue-600">Home</a>
+          <a href="#" className="hover:text-blue-600">Documentation</a>
+          <a href="#" className="hover:text-blue-600">Support</a>
+        </nav>
       </header>
 
-      <main className="px-4 md:px-10 lg:px-20 xl:px-40 py-5">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl md:text-3xl font-bold leading-tight p-4">MRCC EMR Preprocessing Tool</h1>
-          
+      <main className="px-4 md:px-10 lg:px-20 xl:px-40 py-6">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <h2 className="text-2xl font-semibold">MRCC EMR Preprocessing Tool</h2>
+
           <FileUpload onFileUpload={handleFileUpload} />
-          
+
           {fileInfo && <SummaryPanel fileInfo={fileInfo} />}
-          
-          <OptionsPanel 
-            options={options} 
-            onOptionChange={handleOptionChange} 
-            onProcess={processData} 
+
+          <OptionsPanel
+            options={options}
+            onOptionChange={handleOptionChange}
+            onProcess={processData}
             processing={processing}
           />
-          
+
           {cleanedData && (
             <>
               <DataPreview data={cleanedData} />
-              <div className="flex flex-wrap gap-3 px-4 py-3">
+              <div className="flex gap-4 pt-4">
                 <button
                   onClick={() => handleDownload('csv')}
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-blue-100 hover:bg-blue-200 text-gray-900 text-sm font-bold leading-normal tracking-tight"
-                  disabled={processing}
+                  className="bg-blue-100 hover:bg-blue-200 text-sm font-semibold px-4 py-2 rounded-xl"
                 >
                   Download Cleaned File (CSV)
                 </button>
                 <button
                   onClick={() => handleDownload('json')}
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-gray-100 hover:bg-gray-200 text-gray-900 text-sm font-bold leading-normal tracking-tight"
-                  disabled={processing}
+                  className="bg-gray-100 hover:bg-gray-200 text-sm font-semibold px-4 py-2 rounded-xl"
                 >
                   Download Cleaning Report
                 </button>
               </div>
             </>
           )}
-          
-          <div className="px-4 py-5">
-            <h2 className="text-xl font-bold leading-tight tracking-tight mb-3">Notes</h2>
-            <p className="text-base font-normal leading-normal">
-              This tool is designed for internal use only. Please ensure all data handling complies with privacy regulations. For any issues, contact the IT support team.
+
+          <section className="pt-6">
+            <h3 className="text-lg font-bold mb-2">Notes</h3>
+            <p className="text-sm text-gray-700">
+              This tool is designed for internal use only. Ensure all data handling complies with privacy regulations.
+              For any issues, contact the IT support team.
             </p>
-          </div>
+          </section>
         </div>
       </main>
 
-      <footer className="flex justify-center py-6 md:py-10">
-        <p className="text-gray-600 text-sm md:text-base font-normal leading-normal">
-          © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
-        </p>
+      <footer className="text-center py-6 text-gray-500 text-sm">
+        © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
       </footer>
 
       <a ref={downloadLinkRef} className="hidden" />
