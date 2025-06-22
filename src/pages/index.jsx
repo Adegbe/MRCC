@@ -92,16 +92,17 @@ export default function Home() {
         />
       </Head>
 
-      {/* Navbar */}
-      <header className="flex justify-end items-center px-6 py-4 shadow bg-white">
-        <nav className="space-x-6 text-sm font-medium text-gray-600">
-          <a href="#" className="hover:text-gray-900">Home</a>
-          <a href="#" className="hover:text-gray-900">Documentation</a>
-          <a href="#" className="hover:text-gray-900">Support</a>
+      {/* Header */}
+      <header className="flex justify-between items-center px-6 py-4 shadow bg-white">
+        <div className="text-xl font-bold text-gray-900">MRCC Data Cleaner</div>
+        <nav className="flex space-x-6 text-sm font-medium text-gray-600">
+          <a href="#" className="hover:text-blue-600">Home</a>
+          <a href="#" className="hover:text-blue-600">Documentation</a>
+          <a href="#" className="hover:text-blue-600">Support</a>
         </nav>
       </header>
 
-      {/* Main container card */}
+      {/* Main content */}
       <main className="max-w-4xl mx-auto px-6 py-10 bg-white shadow rounded-lg mt-8">
         <h2 className="text-3xl font-bold leading-tight tracking-tight mb-6">MRCC EMR Preprocessing Tool</h2>
 
@@ -150,7 +151,6 @@ export default function Home() {
         © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
       </footer>
 
-      {/* Hidden download link */}
       <a ref={downloadLinkRef} className="hidden" />
     </div>
   );
