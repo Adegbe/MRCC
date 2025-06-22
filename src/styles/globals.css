@@ -6,4 +6,6 @@ body {
   font-family: 'Inter', 'Noto Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #f1f2f4; /* optional: match your Tailwind background */
+  color: #121416; /* optional: match your primary text color */
 }
