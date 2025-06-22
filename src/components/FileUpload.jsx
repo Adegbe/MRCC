@@ -12,12 +12,15 @@ const FileUpload = ({ onFileUpload }) => {
       <label className="block text-sm font-medium text-gray-700 mb-2">
         Supported formats: CSV, Excel, JSON
       </label>
-      <input
-        type="file"
-        onChange={handleFileChange}
-        accept=".csv,.xls,.xlsx,.json"
-        className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-      />
+
+      <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+        <input
+          type="file"
+          onChange={handleFileChange}
+          accept=".csv,.xls,.xlsx,.json"
+          className="block w-full text-sm text-gray-700"
+        />
+      </div>
     </div>
   );
 };
