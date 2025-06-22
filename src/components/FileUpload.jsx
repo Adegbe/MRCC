@@ -7,9 +7,11 @@ const FileUpload = ({ onFileUpload }) => {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload Your File</h2>
-      <label className="block text-sm font-medium text-gray-700 mb-2">Supported formats: CSV, Excel, JSON</label>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Supported formats: CSV, Excel, JSON
+      </label>
       <input
         type="file"
         onChange={handleFileChange}
