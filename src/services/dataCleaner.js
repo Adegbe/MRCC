@@ -290,10 +290,10 @@ const correctInvalidEntries = (data) => {
   return data.map(row => {
     const newRow = { ...row };
     
-    // Correct invalid ages
+    // Correct invalid ages - FIXED THE SYNTAX ERROR HERE
     if ('age' in newRow && newRow.age !== null && newRow.age !== undefined) {
       const ageNum = Number(newRow.age);
-      if (!isNaN(ageNum) {
+      if (!isNaN(ageNum)) {
         if (ageNum < 0 || ageNum > 120) {
           newRow.age = null;
         } else {
