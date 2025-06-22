@@ -13,12 +13,13 @@ const FileUpload = ({ onFileUpload }) => {
         Supported formats: CSV, Excel, JSON
       </label>
 
-      <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+      {/* Small rectangular box */}
+      <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
         <input
           type="file"
           onChange={handleFileChange}
           accept=".csv,.xls,.xlsx,.json"
-          className="block w-full text-sm text-gray-700"
+          className="w-full text-sm text-gray-800 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200"
         />
       </div>
     </div>
