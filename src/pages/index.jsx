@@ -88,13 +88,13 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Noto+Sans:wght@400;500;700;900&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap"
         />
       </Head>
 
-      {/* Header */}
-      <header className="flex justify-between items-center px-6 py-4 shadow bg-white">
-        <div className="text-xl font-bold text-gray-900">MRCC Data Cleaner</div>
+      {/* Full-width header with title and nav */}
+      <header className="bg-white shadow px-6 py-4 flex justify-between items-center">
+        <h1 className="text-xl font-extrabold text-gray-900">MRCC Data Cleaner</h1>
         <nav className="flex space-x-6 text-sm font-medium text-gray-600">
           <a href="#" className="hover:text-blue-600">Home</a>
           <a href="#" className="hover:text-blue-600">Documentation</a>
@@ -102,9 +102,9 @@ export default function Home() {
         </nav>
       </header>
 
-      {/* Main content */}
+      {/* Main content card */}
       <main className="max-w-4xl mx-auto px-6 py-10 bg-white shadow rounded-lg mt-8">
-        <h2 className="text-3xl font-bold leading-tight tracking-tight mb-6">MRCC EMR Preprocessing Tool</h2>
+        <h2 className="text-3xl font-bold tracking-tight mb-6">MRCC EMR Preprocessing Tool</h2>
 
         <FileUpload onFileUpload={handleFileUpload} />
 
@@ -146,7 +146,6 @@ export default function Home() {
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="text-center py-6 text-gray-500 text-sm">
         © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
       </footer>
