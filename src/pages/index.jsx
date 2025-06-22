@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
 import Head from 'next/head';
-import FileUpload from '../components/FileUpload';  // CHANGED TO RELATIVE PATH
-import SummaryPanel from '../components/SummaryPanel';  // CHANGED TO RELATIVE PATH
-import OptionsPanel from '../components/OptionsPanel';  // CHANGED TO RELATIVE PATH
-import DataPreview from '../components/DataPreview';  // CHANGED TO RELATIVE PATH
-import { cleanData } from '../services/dataCleaner';  // CHANGED TO RELATIVE PATH
+import FileUpload from '@/components/FileUpload';
+import SummaryPanel from '@/components/SummaryPanel';
+import OptionsPanel from '@/components/OptionsPanel';
+import DataPreview from '@/components/DataPreview';
+import { cleanData } from '@/services/dataCleaner';
 export default function Home() {
   const [file, setFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
