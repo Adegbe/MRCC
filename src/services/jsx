@@ -1,0 +1,23 @@
+// Example usage in your React component
+import { cleanData } from '../services/dataCleaner';
+
+// Inside your process function
+const processData = async () => {
+  if (!file) return;
+  
+  setProcessing(true);
+  try {
+    const result = await cleanData(file, options);
+    
+    // Access cleaned data
+    setCleanedData(result.cleanedData);
+    
+    // Access processing report
+    setReport(result.report);
+    
+  } catch (error) {
+    setError('Failed to process data: ' + error.message);
+  } finally {
+    setProcessing(false);
+  }
+};
