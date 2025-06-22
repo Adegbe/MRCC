@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import hashlib
 import json
 import os
 import zipfile
@@ -16,8 +15,8 @@ class DataCleaner:
         self.pii_columns = []
         self.duplicate_key_columns = []
         self.custom_rules = {}
-        self.original_columns = []
-        self.column_orig_index = {}
+        self.column_index_map = {}
+        self.validated_columns = []
         
     def load_file(self, file_path: str, low_memory: bool = False) -> pd.DataFrame:
         """Load data from various file formats with auto-detection"""
@@ -39,9 +38,8 @@ class DataCleaner:
             self._log_warning(f"File loading failed: {str(e)}")
             raise
             
-        # Store original columns and their indices
-        self.original_columns = df.columns.tolist()
-        self.column_orig_index = {col: idx+1 for idx, col in enumerate(self.original_columns)}
+        # Create column index mapping (1-indexed)
+        self.column_index_map = {col: idx+1 for idx, col in enumerate(df.columns)}
             
         self.report_data['original_rows'] = len(df)
         self.report_data['original_columns'] = len(df.columns)
@@ -54,17 +52,20 @@ class DataCleaner:
         # Store original columns for tracking
         original_columns = df.columns.tolist()
         
+        # Identify columns that need special validation
+        self.validated_columns = self._get_validated_columns(df)
+        
         # Step 1: Normalize column names
         df = self._normalize_column_names(df)
         
         # Step 2: Clean string data
         df = self._clean_string_data(df)
         
-        # Step 3: Standardize date formats
-        df = self._standardize_dates(df)
-        
-        # Step 4: Handle missing data
+        # Step 3: Handle missing data
         df = self._handle_missing_data(df)
+        
+        # Step 4: Detect and correct wrong entries
+        df = self._correct_wrong_entries(df)
         
         # Step 5: Handle duplicates
         df = self._handle_duplicates(df)
@@ -72,10 +73,7 @@ class DataCleaner:
         # Step 6: Mask PII data
         df = self._mask_pii(df)
         
-        # Step 7: Detect and correct wrong entries
-        df = self._correct_wrong_entries(df)
-        
-        # Step 8: Apply custom rules if any
+        # Step 7: Apply custom rules if any
         if self.custom_rules:
             df = self._apply_custom_rules(df)
             
@@ -93,6 +91,21 @@ class DataCleaner:
         self.report_data['processing_time'] = datetime.now().isoformat()
         
         return df
+    
+    def _get_validated_columns(self, df: pd.DataFrame) -> list:
+        """Identify columns that need special validation"""
+        validated = []
+        if 'age' in df.columns:
+            validated.append('age')
+        if 'blood_type' in df.columns:
+            validated.append('blood_type')
+        
+        # Add date-related columns
+        date_cols = [col for col in df.columns if any(kw in col.lower() 
+                    for kw in ['date', 'dob', 'time'])]
+        validated.extend(date_cols)
+        
+        return validated
     
     def generate_report(self, df: pd.DataFrame, report_path: str = None) -> dict:
         """Generate comprehensive data profile report"""
@@ -173,13 +186,17 @@ class DataCleaner:
     
     def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize column names to lowercase with underscores"""
-        df.columns = (
-            df.columns.str.strip()
-            .str.lower()
-            .str.replace(r'[^\w]+', '_', regex=True)
-            .str.replace(r'_+', '_', regex=True)
-            .str.strip('_')
-        )
+        new_columns = []
+        for col in df.columns:
+            new_col = (
+                str(col).strip()
+                .lower()
+                .replace(' ', '_')
+                .replace('-', '_')
+                .replace(r'[^\w_]+', '', regex=True)
+            )
+            new_columns.append(new_col)
+        df.columns = new_columns
         return df
     
     def _clean_string_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -188,7 +205,7 @@ class DataCleaner:
         
         for col in string_cols:
             # Trim whitespace
-            df[col] = df[col].str.strip()
+            df[col] = df[col].astype(str).str.strip()
             
             # Standardize gender-like columns
             if 'gender' in col or 'sex' in col:
@@ -197,77 +214,90 @@ class DataCleaner:
                     .replace({
                         'm': 'male', 'male': 'male', 
                         'f': 'female', 'female': 'female',
-                        '0': 'male', '1': 'female'  # Handle numeric representations
+                        '0': 'male', '1': 'female'
                     })
                 )
-                
-            # Remove special characters (except basic punctuation)
-            df[col] = df[col].str.replace(r'[^\w\s.,-]', '', regex=True)
-            
-        return df
-    
-    def _standardize_dates(self, df: pd.DataFrame, date_format: str = '%Y-%m-%d') -> pd.DataFrame:
-        """Convert all date columns to ISO 8601 format"""
-        date_cols = [col for col in df.columns if 'date' in col or 'dob' in col or 'time' in col]
-        
-        for col in date_cols:
-            # Try to convert to datetime
-            try:
-                # First try inferring datetime automatically
-                df[col] = pd.to_datetime(df[col], errors='coerce', infer_datetime_format=True)
-                
-                # Handle numeric dates (Excel serial numbers)
-                if df[col].isna().any():
-                    try:
-                        df[col] = pd.to_datetime(
-                            pd.to_numeric(df[col], errors='coerce'), 
-                            unit='D', 
-                            origin='1899-12-30',
-                            errors='coerce'
-                        )
-                    except:
-                        pass
-                
-                # Format to string
-                df[col] = df[col].dt.strftime(date_format)
-            except Exception as e:
-                self._log_warning(f"Date conversion failed for {col}: {str(e)}")
                 
         return df
     
     def _handle_missing_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Handle missing data according to predefined rules"""
+        """Handle missing data - replace empty strings with 'N'"""
         if df.empty:
             return df
             
-        missing_counts = df.isnull().sum()
-        total_rows = len(df)
-        
-        # Drop columns with too many missing values (>50%)
-        cols_to_drop = [col for col in df.columns if missing_counts[col] / total_rows > 0.5]
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
-            self._log_warning(f"Dropped columns with >50% missing values: {', '.join(cols_to_drop)}")
-        
-        # Impute remaining missing values
+        # Convert all columns to string to handle missing values consistently
         for col in df.columns:
-            if df[col].isnull().any():
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    impute_val = df[col].median()
-                    df[col] = df[col].fillna(impute_val)
-                    self._log_warning(f"Imputed numeric column '{col}' with median: {impute_val}")
-                elif pd.api.types.is_datetime64_any_dtype(df[col]):
-                    # Drop rows with missing dates
-                    initial_count = len(df)
-                    df = df.dropna(subset=[col])
-                    dropped_count = initial_count - len(df)
-                    if dropped_count > 0:
-                        self._log_warning(f"Dropped {dropped_count} rows with missing dates in column '{col}'")
-                else:
-                    impute_val = df[col].mode()[0] if not df[col].mode().empty else 'unknown'
-                    df[col] = df[col].fillna(impute_val)
-                    self._log_warning(f"Imputed categorical column '{col}' with mode: {impute_val}")
+            # Skip validated columns - they will be handled in correction step
+            if col in self.validated_columns:
+                continue
+                
+            # Replace NaN with empty string
+            df[col] = df[col].fillna('')
+            # Convert to string and trim
+            df[col] = df[col].astype(str).str.strip()
+            # Replace empty strings with 'N'
+            df.loc[df[col] == '', col] = 'N'
                     
+        return df
+    
+    def _correct_wrong_entries(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Detect and correct wrong entries with special handling for validated columns"""
+        if df.empty:
+            return df
+            
+        # Age validation - replace invalid ages with "N"
+        if 'age' in df.columns:
+            try:
+                # Convert to numeric, coerce errors
+                df['age'] = pd.to_numeric(df['age'], errors='coerce')
+                # Replace invalid ages (<0 or >120) with "N"
+                invalid_age_mask = (df['age'] < 0) | (df['age'] > 120) | df['age'].isna()
+                df.loc[invalid_age_mask, 'age'] = "N"
+            except Exception as e:
+                self._log_warning(f"Age validation failed: {str(e)}")
+                df['age'] = "N"
+                
+        # Blood type normalization
+        if 'blood_type' in df.columns:
+            # Standardize blood types
+            df['blood_type'] = df['blood_type'].str.upper().str.strip()
+            # Replace invalid blood types with "N"
+            valid_blood_types = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
+            invalid_blood_mask = ~df['blood_type'].isin(valid_blood_types)
+            df.loc[invalid_blood_mask, 'blood_type'] = "N"
+        
+        # Date validation - replace invalid dates with "N"
+        date_cols = [col for col in self.validated_columns 
+                    if any(kw in col for kw in ['date', 'dob', 'time'])]
+        current_date = datetime.now()
+        
+        for col in date_cols:
+            try:
+                # Convert to datetime
+                date_series = pd.to_datetime(df[col], errors='coerce')
+                
+                # Replace invalid dates (future dates or unparseable) with "N"
+                invalid_mask = (date_series > current_date) | date_series.isna()
+                invalid_count = invalid_mask.sum()
+                
+                if invalid_count > 0:
+                    df.loc[invalid_mask, col] = "N"
+                    
+                # Format valid dates to string
+                valid_mask = ~invalid_mask
+                df.loc[valid_mask, col] = date_series[valid_mask].dt.strftime('%Y-%m-%d')
+            except Exception as e:
+                self._log_warning(f"Date validation failed for {col}: {str(e)}")
+                df[col] = "N"
+                    
+        # Replace any remaining invalid values with "N" for validated columns
+        for col in self.validated_columns:
+            if col in df.columns:
+                # Replace empty strings and whitespace-only with "N"
+                df[col] = df[col].astype(str)
+                empty_mask = df[col].str.strip().eq('')
+                df.loc[empty_mask, col] = "N"
+        
         return df
     
     def _handle_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -302,66 +332,12 @@ class DataCleaner:
         if not self.pii_columns or df.empty:
             return df
             
-        # Only process columns that exist in the DataFrame
-        valid_pii_columns = [col for col in self.pii_columns if col in df.columns]
-        
-        for col in valid_pii_columns:
-            # Get original column index from stored mapping
-            orig_idx = self.column_orig_index.get(col, None)
-            
-            if orig_idx:
+        for col in self.pii_columns:
+            if col in df.columns:
+                # Get original column index
+                col_idx = self.column_index_map.get(col, 0)
                 # Replace all values with MRCC + column number
-                df[col] = f"MRCC{orig_idx}"
-            else:
-                self._log_warning(f"Original index not found for PII column: {col}")
-                
-        return df
-    
-    def _correct_wrong_entries(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Detect and correct common data entry errors"""
-        if df.empty:
-            return df
-            
-        # Age validation - replace invalid ages with "N"
-        if 'age' in df.columns:
-            try:
-                # Convert to numeric
-                df['age'] = pd.to_numeric(df['age'], errors='coerce')
-                if pd.api.types.is_numeric_dtype(df['age']):
-                    # Replace invalid ages (<0 or >120) with "N"
-                    invalid_age_mask = (df['age'] < 0) | (df['age'] > 120)
-                    invalid_count = invalid_age_mask.sum()
-                    if invalid_count > 0:
-                        df.loc[invalid_age_mask, 'age'] = "N"
-                        self._log_warning(f"Found {invalid_count} rows with invalid age values")
-            except Exception as e:
-                self._log_warning(f"Age validation failed: {str(e)}")
-                
-        # Date validation - replace invalid dates with "N"
-        date_cols = [col for col in df.columns if 'date' in col or 'dob' in col or 'time' in col]
-        current_date = pd.Timestamp.now()
-        
-        for col in date_cols:
-            try:
-                # Convert to datetime
-                date_series = pd.to_datetime(df[col], errors='coerce')
-                
-                # Replace invalid dates (future dates or unparseable) with "N"
-                invalid_mask = (date_series > current_date) | date_series.isna()
-                invalid_count = invalid_mask.sum()
-                
-                if invalid_count > 0:
-                    df.loc[invalid_mask, col] = "N"
-                    self._log_warning(f"Found {invalid_count} invalid dates in column '{col}'")
-            except Exception as e:
-                self._log_warning(f"Date validation failed for {col}: {str(e)}")
-                    
-        # Replace other invalid entries with "N" based on data type
-        for col in df.columns:
-            if pd.api.types.is_object_dtype(df[col]):
-                # Replace empty strings and whitespace-only with "N"
-                empty_mask = df[col].astype(str).str.strip().eq('')
-                df.loc[empty_mask, col] = "N"
+                df[col] = f'MRCC{col_idx}'
                 
         return df
     
