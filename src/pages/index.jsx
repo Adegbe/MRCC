@@ -82,7 +82,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#f1f2f4] text-[#121416] font-sans">
       <Head>
         <title>MRCC EMR Preprocessing Tool</title>
         <meta name="description" content="Data cleaning tool for EMR systems" />
@@ -94,20 +94,18 @@ export default function Home() {
         />
       </Head>
 
-      <header className="flex items-center justify-between border-b border-gray-200 px-4 md:px-10 py-4">
-        <div className="flex items-center gap-3 text-gray-900">
-          <h1 className="text-lg font-bold">MRCC Data Cleaner</h1>
-        </div>
-        <nav className="flex gap-6 text-sm font-medium">
-          <a href="#" className="hover:text-blue-600">Home</a>
-          <a href="#" className="hover:text-blue-600">Documentation</a>
-          <a href="#" className="hover:text-blue-600">Support</a>
-        </nav>
-      </header>
+      <div className="max-w-6xl mx-auto px-4 md:px-10 lg:px-20">
+        <header className="flex items-center justify-between border-b border-gray-200 py-5">
+          <div className="text-lg font-bold text-gray-900">MRCC Data Cleaner</div>
+          <nav className="flex gap-6 text-sm font-medium text-gray-600">
+            <a href="#" className="hover:text-blue-600">Home</a>
+            <a href="#" className="hover:text-blue-600">Documentation</a>
+            <a href="#" className="hover:text-blue-600">Support</a>
+          </nav>
+        </header>
 
-      <main className="px-4 md:px-10 lg:px-20 xl:px-40 py-6">
-        <div className="max-w-6xl mx-auto space-y-6">
-          <h2 className="text-2xl font-semibold">MRCC EMR Preprocessing Tool</h2>
+        <main className="py-8 space-y-6">
+          <h2 className="text-3xl font-bold leading-tight tracking-tight">MRCC EMR Preprocessing Tool</h2>
 
           <FileUpload onFileUpload={handleFileUpload} />
 
@@ -126,13 +124,13 @@ export default function Home() {
               <div className="flex gap-4 pt-4">
                 <button
                   onClick={() => handleDownload('csv')}
-                  className="bg-blue-100 hover:bg-blue-200 text-sm font-semibold px-4 py-2 rounded-xl"
+                  className="bg-blue-100 hover:bg-blue-200 text-sm font-semibold px-6 py-2 rounded-xl"
                 >
                   Download Cleaned File (CSV)
                 </button>
                 <button
                   onClick={() => handleDownload('json')}
-                  className="bg-gray-100 hover:bg-gray-200 text-sm font-semibold px-4 py-2 rounded-xl"
+                  className="bg-gray-100 hover:bg-gray-200 text-sm font-semibold px-6 py-2 rounded-xl"
                 >
                   Download Cleaning Report
                 </button>
@@ -147,12 +145,12 @@ export default function Home() {
               For any issues, contact the IT support team.
             </p>
           </section>
-        </div>
-      </main>
+        </main>
 
-      <footer className="text-center py-6 text-gray-500 text-sm">
-        © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
-      </footer>
+        <footer className="text-center py-6 text-gray-500 text-sm">
+          © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
+        </footer>
+      </div>
 
       <a ref={downloadLinkRef} className="hidden" />
     </div>
