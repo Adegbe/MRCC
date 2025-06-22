@@ -1,16 +1,22 @@
 import { useState, useRef } from 'react';
 import Head from 'next/head';
 import FileUpload from '@components/FileUpload';
-import SummaryPanel from '@components/SummaryPanel';
+import FileSummary from '@components/FileSummary';
 import OptionsPanel from '@components/OptionsPanel';
 import DataPreview from '@components/DataPreview';
+import SummaryPanel from '@components/SummaryPanel';
 import { cleanData } from '@services/dataCleaner';
+
 export default function Home() {
   const [file, setFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
-  const [cleanedData, setCleanedData] = useState(null);
+  const [originalData, setOriginalData] = useState([]);
+  const [cleanedData, setCleanedData] = useState([]);
   const [report, setReport] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [showColumnSummary, setShowColumnSummary] = useState(false);
+  const downloadLinkRef = useRef(null);
+
   const [options, setOptions] = useState({
     normalizeColumns: true,
     standardizeGender: true,
@@ -20,19 +26,14 @@ export default function Home() {
     correctInvalid: true,
     validateTypes: true
   });
-  const downloadLinkRef = useRef(null);
 
-  const handleFileUpload = (uploadedFile) => {
-    setFile(uploadedFile);
-    setCleanedData(null);
+  const handleFileUpload = (file, data, fileInfo) => {
+    setFile(file);
+    setOriginalData(data);
+    setCleanedData([]);
     setReport(null);
-    
-    // Set mock file info (will be replaced with actual data from file)
-    setFileInfo({
-      type: uploadedFile.name.split('.').pop().toUpperCase(),
-      rows: 1000,
-      columns: 20
-    });
+    setFileInfo(fileInfo);
+    setShowColumnSummary(false);
   };
 
   const handleOptionChange = (option) => {
@@ -43,13 +44,13 @@ export default function Home() {
   };
 
   const processData = async () => {
-    if (!file) return;
+    if (!file || !originalData.length) return;
     
     setProcessing(true);
     try {
-      const result = await cleanData(file, options);
-      setCleanedData(result.cleanedData);
-      setReport(result.report);
+      const { cleanedData, report } = await cleanData(originalData, options);
+      setCleanedData(cleanedData);
+      setReport(report);
     } catch (error) {
       console.error('Error processing data:', error);
     } finally {
@@ -58,7 +59,7 @@ export default function Home() {
   };
 
   const handleDownload = (format) => {
-    if (!cleanedData) return;
+    if (!cleanedData.length) return;
     
     if (format === 'csv') {
       // Convert to CSV
@@ -94,87 +95,104 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <Head>
         <title>MRCC EMR Preprocessing Tool</title>
         <meta name="description" content="Data cleaning tool for EMR systems" />
         <link rel="icon" href="/favicon.ico" />
-        <link rel="preconnect" href="https://fonts.gstatic.com/" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?display=swap&family=Inter:wght@400;500;700;900&family=Noto+Sans:wght@400;500;700;900"
-        />
       </Head>
 
-      <header className="flex items-center justify-between border-b border-gray-200 px-4 md:px-10 py-3">
-        <div className="flex items-center gap-4 text-gray-900">
-          <div className="h-4 w-4">
-            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" clipRule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor"></path>
-            </svg>
+      <header className="bg-blue-700 text-white py-4 px-4 md:px-10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="h-6 w-6 text-white">
+              <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path fillRule="evenodd" clipRule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor"></path>
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold">Data Cleaner</h2>
           </div>
-          <h2 className="text-lg font-bold leading-tight tracking-tight">Data Cleaner</h2>
-        </div>
-        <div className="flex flex-1 justify-end gap-4 md:gap-8">
-          <div className="flex items-center gap-4 md:gap-9">
-            <a className="text-sm font-medium leading-normal hover:text-blue-600" href="#">Home</a>
-            <a className="text-sm font-medium leading-normal hover:text-blue-600" href="#">Documentation</a>
-            <a className="text-sm font-medium leading-normal hover:text-blue-600" href="#">Support</a>
+          <div className="flex items-center gap-6">
+            <a className="text-sm hover:text-blue-200" href="#">Home</a>
+            <a className="text-sm hover:text-blue-200" href="#">Documentation</a>
+            <a className="text-sm hover:text-blue-200" href="#">Support</a>
+            <div className="h-8 w-8 rounded-full bg-blue-500 border-2 border-white" />
           </div>
-          <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-gray-200 border-2 border-dashed" />
         </div>
       </header>
 
-      <main className="px-4 md:px-10 lg:px-20 xl:px-40 py-5">
+      <main className="px-4 md:px-10 py-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl md:text-3xl font-bold leading-tight p-4">MRCC EMR Preprocessing Tool</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6">MRCC EMR Preprocessing Tool</h1>
           
-          <FileUpload onFileUpload={handleFileUpload} />
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+            {/* Upload Section */}
+            <section className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload File</h2>
+              <FileUpload onFileUpload={handleFileUpload} disabled={processing} />
+            </section>
+            
+            {fileInfo && (
+              <>
+                {/* File Summary */}
+                <section className="p-6 border-b border-gray-200">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">File Summary</h2>
+                  <FileSummary 
+                    fileInfo={fileInfo} 
+                    showColumnSummary={showColumnSummary} 
+                    setShowColumnSummary={setShowColumnSummary} 
+                  />
+                </section>
+
+                {/* Preprocessing Options */}
+                <section className="p-6 border-b border-gray-200">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Preprocessing Options</h2>
+                  <OptionsPanel 
+                    options={options} 
+                    onOptionChange={handleOptionChange} 
+                    onProcess={processData} 
+                    processing={processing}
+                  />
+                </section>
+
+                {/* Preview Section */}
+                <section className="p-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Preview Cleaned Data</h2>
+                  <DataPreview 
+                    originalData={originalData} 
+                    cleanedData={cleanedData} 
+                    loading={processing}
+                  />
+                  
+                  {report && (
+                    <SummaryPanel 
+                      report={report} 
+                      cleanedData={cleanedData} 
+                      onDownloadCSV={() => handleDownload('csv')}
+                      onDownloadReport={() => handleDownload('json')}
+                    />
+                  )}
+                </section>
+              </>
+            )}
+          </div>
           
-          {fileInfo && <SummaryPanel fileInfo={fileInfo} />}
-          
-          <OptionsPanel 
-            options={options} 
-            onOptionChange={handleOptionChange} 
-            onProcess={processData} 
-            processing={processing}
-          />
-          
-          {cleanedData && (
-            <>
-              <DataPreview data={cleanedData} />
-              <div className="flex flex-wrap gap-3 px-4 py-3">
-                <button
-                  onClick={() => handleDownload('csv')}
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-blue-100 hover:bg-blue-200 text-gray-900 text-sm font-bold leading-normal tracking-tight"
-                  disabled={processing}
-                >
-                  Download Cleaned File (CSV)
-                </button>
-                <button
-                  onClick={() => handleDownload('json')}
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-gray-100 hover:bg-gray-200 text-gray-900 text-sm font-bold leading-normal tracking-tight"
-                  disabled={processing}
-                >
-                  Download Cleaning Report
-                </button>
-              </div>
-            </>
-          )}
-          
-          <div className="px-4 py-5">
-            <h2 className="text-xl font-bold leading-tight tracking-tight mb-3">Notes</h2>
-            <p className="text-base font-normal leading-normal">
+          {/* Notes Section */}
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Notes</h2>
+            <p className="text-gray-600">
               This tool is designed for internal use only. Please ensure all data handling complies with privacy regulations. For any issues, contact the IT support team.
             </p>
           </div>
         </div>
       </main>
 
-      <footer className="flex justify-center py-6 md:py-10">
-        <p className="text-gray-600 text-sm md:text-base font-normal leading-normal">
-          © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
-        </p>
+      <footer className="bg-white py-6">
+        <div className="max-w-6xl mx-auto px-4 md:px-10">
+          <p className="text-gray-600 text-center text-sm">
+            © 2025 MRCC Solutions Inc. All rights reserved. Version 1.2.3
+          </p>
+        </div>
       </footer>
 
       <a ref={downloadLinkRef} className="hidden" />
