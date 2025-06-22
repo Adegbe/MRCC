@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path'); // Add this import at the top
+
 module.exports = {
   reactStrictMode: true,
   swcMinify: true,
@@ -11,6 +13,7 @@ module.exports = {
     };
     
     // Ignore package.json in services directory
+    config.plugins = config.plugins || [];
     config.plugins.push(
       new (require('webpack').IgnorePlugin)({
         resourceRegExp: /\/src\/services\/package\.json$/
