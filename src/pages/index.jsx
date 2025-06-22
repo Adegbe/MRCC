@@ -1,9 +1,9 @@
 import { useState, useRef } from 'react';
 import Head from 'next/head';
-import FileUpload from '../components/FileUpload';
-import SummaryPanel from '../components/SummaryPanel';
-import OptionsPanel from '../components/OptionsPanel';
-import DataPreview from '../components/DataPreview';
+import FileUpload from '@/components/FileUpload';
+import SummaryPanel from '@/components/SummaryPanel';
+import OptionsPanel from '@/components/OptionsPanel';
+import DataPreview from '@/components/DataPreview';
 import { cleanData } from '../services/dataCleaner';
 
 export default function Home() {
